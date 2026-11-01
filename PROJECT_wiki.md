@@ -140,24 +140,30 @@ mosdns start -c /var/etc/mosdns.json -d /etc/mosdns   # 前台跑，Ctrl+C 退�
 | 触发 | 构建范围 | 产物去向 |
 |---|---|---|
 | push tag（`v*`） | 精选 9 个常用架构 × 2 个 OpenWrt 版本 = 18 job | 发布到该 tag 的 Release |
-| 手动 Run workflow | 自己选架构 + 版本 | 填了 `release_tag` → Release；留空 → Actions artifact |
+| 手动 Run workflow | 下拉选 1 个架构 × 选定版本（默认 x86_64 + 25.12 = 1 job） | 填了 `release_tag` → Release；留空 → Actions artifact |
 
 手动触发的三个输入：
 
-- **arch**：留空 = 精选 9 个；`all` = 全部 32 个；也可填单个如 `x86_64`
-- **tag**：`openwrt-24.10` / `openwrt-25.12` / `all`
-- **release_tag**：留空时**不会碰 Release**，只把 tar.gz 挂成 Actions 产物
+- **arch**（下拉单选，默认 `x86_64`）：选 `all` = 全部 32 个架构；其余为单个架构
+- **tag**（下拉单选，默认 `openwrt-25.12`）：`openwrt-25.12` / `openwrt-24.10` / `all`
+- **release_tag**（文本框）：留空时**不会碰 Release**，只把 tar.gz 挂成 Actions 产物
 
-### 架构清单是唯一数据源
+> GitHub Actions 的 `choice` 只能单选、只能硬编码选项，不支持多选下拉。想一次编多个架构，只能选 `all` 或者分多次触发。
 
-在 `prepare` job 的内嵌 Python 里：
+### 架构清单有两份，必须同步
 
-- `ALL_ARCHES` —— 全部 32 个架构
-- `DEFAULT_ARCHES` —— push tag 时跑的精选列表
+| 位置 | 作用 |
+|---|---|
+| `workflow_dispatch.inputs.arch.options` | 只决定下拉框显示什么 |
+| `prepare` job Python 里的 `ALL_ARCHES` | 真正的构建清单 |
+
+`choice` 无法引用变量，这是平台限制。两边不同步时 `prepare` 会直接报错 `options 与 ALL_ARCHES 不同步`，不会静默构建错误架构。
+
+其余三份数据只在 Python 里（单一来源）：
+
+- `DEFAULT_ARCHES` —— push tag 时跑的精选列表（9 个）
 - `ARCH_ALIAS` —— 版本间改名映射（如 25.12 的 `riscv64_riscv64` → `riscv64_generic`）
 - `SKIP` —— 该版本已不存在的组合（如 25.12 的 `mips_4kec`），**在 prepare 阶段就剔除**
-
-加架构只改 python 列表即可，不需要同步 workflow_dispatch 的 options（arch 是自由文本输入，填错会报错并列出合法值）。
 
 ### 为什么要有 prepare job
 
