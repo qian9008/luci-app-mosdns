@@ -169,6 +169,35 @@ mosdns start -c /var/etc/mosdns.json -d /etc/mosdns   # 前台跑，Ctrl+C 退�
 
 旧写法把 `EFFECTIVE_ARCH` / `SKIP_BUILD` 塞进每个 job 的 `if`，结果是无效组合照样启动 runner 空跑。现在映射和剔除都前置到 prepare，build job 的 matrix 里每项已经是最终可用的 `effective_arch`，job 内无分支逻辑。
 
+### ARCH 环境变量（缺了整个 CI 就是假的）
+
+`sbwml/openwrt-gh-action-sdk` 的 `Dockerfile` 是 `ARG ARCH=mips_24kc` + `FROM ghcr.io/openwrt/sdk:$ARCH`。
+
+**不传 `ARCH`，所有 job 都会编 mips_24kc 的包**，产物落在 `bin/packages/mips_24kc/`，而打包步骤找
+`bin/packages/<effective_arch>/`，必然 `No such file or directory`。更坑的是编译步骤是绿的，
+再加 `continue-on-error`，日志里完全看不出真凶。这个 workflow 从最初版（`dbdd91a`）就缺这个变量。
+
+```yaml
+- name: 编译软件包
+  uses: sbwml/openwrt-gh-action-sdk@go1.27
+  env:
+    ARCH: ${{ matrix.pkg_arch }}    # 必填，格式 <arch>-openwrt-<branch>
+    FEEDNAME: packages_ci
+    PACKAGES: luci-app-mosdns
+```
+
+镜像 tag 格式是 `<arch>-openwrt-<branch>`，**必须带 `openwrt-` 前缀**。`x86_64-25.12` 是 404，
+`x86_64-openwrt-25.12` 才存在（2026-11 逐一探测 32 架构 × 2 版本得到，正好 3 个组合缺失，
+与 `SKIP` / `ARCH_ALIAS` 表完全吻合）。
+
+三个名字别混：
+
+| 名字 | 值示例 | 用途 |
+|---|---|---|
+| `arch` | `riscv64_riscv64` | 用户视角的架构名 |
+| `effective_arch` | `riscv64_generic` | `bin/packages/` 下的目录名 |
+| `pkg_arch` | `riscv64_generic-openwrt-25.12` | **SDK 镜像 tag** + tar 包名 |
+
 ## 8. 本地快速验证（不编译）
 
 ### 为什么 CI 慢，和前端改动无关

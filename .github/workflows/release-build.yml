@@ -236,17 +236,29 @@ jobs:
           sed -i '/golang-package/a \\tGO_PKG_DEFAULT_LDFLAGS:=-w -s -extldflags "-static"' geo2txt/Makefile
           git clone https://github.com/sbwml/v2ray-geodata
 
+      # ARCH 必须传，且格式是「有效架构-版本」，例如 x86_64-openwrt-25.12。
+      # 它就是 SDK 的 docker 镜像 tag：FROM ghcr.io/openwrt/sdk:$ARCH。
+      # 不传的话 action 会取 Dockerfile 默认值 mips_24kc，编出一个 MIPS 包，
+      # 产物落在 bin/packages/mips_24kc/，后面的打包步骤必然找不到目录。
       - name: 编译软件包
         uses: sbwml/openwrt-gh-action-sdk@go1.27
         env:
+          ARCH: ${{ matrix.pkg_arch }}
           FEEDNAME: packages_ci
           PACKAGES: luci-app-mosdns
           NO_REFRESH_CHECK: true
 
-      # continue-on-error：个别架构可能没有产物，不让整个 matrix 变红。
+      # 不再用 continue-on-error 掩盖错误：没有产物就该红，否则要等到
+      # release-action 找不到文件才暴露，日志里看不出真正原因。
       - name: 打包
-        continue-on-error: true
         run: |
+          set -e
+          if [ ! -d "bin/packages/${{ matrix.effective_arch }}/packages_ci" ]; then
+            echo "::error::未找到 bin/packages/${{ matrix.effective_arch }}/packages_ci"
+            echo "bin/packages 实际内容："
+            find bin/packages -maxdepth 2 -type d 2>/dev/null || echo "（bin/packages 不存在）"
+            exit 1
+          fi
           tar -zcvf ${{ matrix.pkg_arch }}.tar.gz -C bin/packages/${{ matrix.effective_arch }}/ packages_ci
 
       - name: 上传到 Release
