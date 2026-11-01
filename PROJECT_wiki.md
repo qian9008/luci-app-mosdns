@@ -168,3 +168,105 @@ mosdns start -c /var/etc/mosdns.json -d /etc/mosdns   # 前台跑，Ctrl+C 退�
 ### 为什么要有 prepare job
 
 旧写法把 `EFFECTIVE_ARCH` / `SKIP_BUILD` 塞进每个 job 的 `if`，结果是无效组合照样启动 runner 空跑。现在映射和剔除都前置到 prepare，build job 的 matrix 里每项已经是最终可用的 `effective_arch`，job 内无分支逻辑。
+
+### ARCH 环境变量（缺了整个 CI 就是假的）
+
+`sbwml/openwrt-gh-action-sdk` 的 `Dockerfile` 是 `ARG ARCH=mips_24kc` + `FROM ghcr.io/openwrt/sdk:$ARCH`。
+
+**不传 `ARCH`，所有 job 都会编 mips_24kc 的包**，产物落在 `bin/packages/mips_24kc/`，而打包步骤找
+`bin/packages/<effective_arch>/`，必然 `No such file or directory`。更坑的是编译步骤是绿的，
+再加 `continue-on-error`，日志里完全看不出真凶。这个 workflow 从最初版（`dbdd91a`）就缺这个变量。
+
+```yaml
+- name: 编译软件包
+  uses: sbwml/openwrt-gh-action-sdk@go1.27
+  env:
+    ARCH: ${{ matrix.pkg_arch }}    # 必填，格式 <arch>-openwrt-<branch>
+    FEEDNAME: packages_ci
+    PACKAGES: luci-app-mosdns
+```
+
+镜像 tag 格式是 `<arch>-openwrt-<branch>`，**必须带 `openwrt-` 前缀**。`x86_64-25.12` 是 404，
+`x86_64-openwrt-25.12` 才存在（2026-11 逐一探测 32 架构 × 2 版本得到，正好 3 个组合缺失，
+与 `SKIP` / `ARCH_ALIAS` 表完全吻合）。
+
+三个名字别混：
+
+| 名字 | 值示例 | 用途 |
+|---|---|---|
+| `arch` | `riscv64_riscv64` | 用户视角的架构名 |
+| `effective_arch` | `riscv64_generic` | `bin/packages/` 下的目录名 |
+| `pkg_arch` | `riscv64_generic-openwrt-25.12` | **SDK 镜像 tag** + tar 包名 |
+
+## 8. 本地快速验证（不编译）
+
+### 为什么 CI 慢，和前端改动无关
+
+`luci-app-mosdns` 的 Makefile 是 `LUCI_PKGARCH:=all` —— 纯文件包（JS / ucode / init.d / JSON / po），不含任何 Go 二进制，内容对所有 CPU 架构完全相同。
+
+CI 慢的根源在依赖：`PACKAGES: luci-app-mosdns` 会连带编译 `mosdns` 和 `geo2txt` 的 Go 交叉编译，每个架构 5~10 分钟。而实际需要分架构的只有这 2 个包，其余 4 个（luci-app-mosdns、luci-i18n-mosdns-zh-cn、v2ray-geoip、v2ray-geosite）都是架构无关的。
+
+**改前端去跑 CI，等于为了换一张 UI 图重新编译整个操作系统。**
+
+### tools/pack-luci.sh
+
+```sh
+./tools/pack-luci.sh                    # → /tmp/luci-app-mosdns-overlay.tar.gz
+./tools/pack-luci.sh ./out.tar.gz       # 指定输出
+```
+
+产出几十 KB，秒级。路由器上：
+
+```sh
+cd / && tar xzf /tmp/luci-app-mosdns-overlay.tar.gz
+/etc/init.d/mosdns restart      # init.d / ucode 后端改动
+rm -rf /tmp/luci-*              # LuCI 页面缓存
+/etc/init.d/rpcd restart        # menu.d / acl.d 改动
+```
+
+### 绝对不能被覆盖的两个路径
+
+| 路径 | 后果 |
+|---|---|
+| `/etc/config/mosdns` | 所有 UCI 设置重置为默认 |
+| `/etc/mosdns/rule/*.txt` | 黑白名单 / hosts / 重定向规则全部清空 |
+
+脚本已用 `--exclude` 排除，并在打包后自检 `tar tzf | grep`，有残留就报错退出。
+
+### po 翻译覆盖无效
+
+运行时读的是 luci.mk 编译出的 `.lmo`，`.po` 是源文件。直接覆盖 `.po` 不会有任何效果，UI 仍显示英文原文。要翻译生效只能走完整 SDK 构建。
+
+### 前提：mosdns 二进制必须是打过 patch 的版本
+
+本仓库的 `mosdns/` 有 30+ 个 patch（stats_api、热重载、adblock_set 等）。如果路由器上的 `mosdns` 是 OpenWrt 官方源的**原版**，覆盖本仓库的 `luci-app-mosdns` 文件层会生成引用不存在插件的配置，mosdns 直接启动失败。覆盖前先确认 `mosdns -v` 或 `/usr/bin/mosdns` 来源。
+
+### ⚠ 编译步骤必须传 ARCH（踩过坑）
+
+`sbwml/openwrt-gh-action-sdk` 用 `env.ARCH` 决定拉哪个 SDK 镜像：
+
+```dockerfile
+ARG ARCH=mips_24kc
+FROM ghcr.io/openwrt/sdk:$ARCH
+```
+
+所以 workflow 里必须写：
+
+```yaml
+env:
+  ARCH: ${{ matrix.pkg_arch }}   # 形如 x86_64-openwrt-25.12
+```
+
+**不传的后果不是报错，而是静默编错架构**：action 取默认值 `mips_24kc`，镜像真实存在，编译一路绿灯，产物落到 `bin/packages/mips_24kc/packages_ci`。直到 `tar -C bin/packages/x86_64/` 才炸，报 `Cannot open: No such file or directory`，日志完全指不到真凶。
+
+三个名字的关系（别混）：
+
+| 变量 | 示例 | 用途 |
+|---|---|---|
+| `arch` | `riscv64_riscv64` | 用户视角的架构名，产物文件名前缀 |
+| `effective_arch` | `riscv64_generic` | 经 `ARCH_ALIAS` 映射后，决定 `bin/packages/<x>/` 目录名 |
+| `pkg_arch` | `riscv64_generic-openwrt-25.12` | 同时用于 **SDK 镜像 tag** 和 tar 包文件名 |
+
+打包步骤不再用 `continue-on-error` 掩盖失败，目录不存在时直接 `::error::` 并打印 `bin/packages` 的实际结构后退出。
+
+校验矩阵与镜像是否对得上（本地可跑，需要 ghcr tag 列表）：63 个合法组合当前全部命中 `ghcr.io/openwrt/sdk`。
