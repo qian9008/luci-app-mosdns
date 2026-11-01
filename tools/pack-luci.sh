@@ -15,17 +15,22 @@
 #   etc/mosdns/rule/*.txt     黑白名单 / hosts / 重定向规则，覆盖 = 清空
 #
 # 用法：
-#   ./tools/pack-luci.sh               # 输出 /tmp/luci-app-mosdns-overlay.tar.gz
+#   ./tools/pack-luci.sh               # 输出 ./dist/luci-app-mosdns-overlay.tar.gz
 #   ./tools/pack-luci.sh ./out.tar.gz  # 指定输出
+#
+# 默认落在项目内 dist/ 而不是 /tmp：macOS 的 /tmp 其实是 /private/tmp 的符号链接，
+# 用 Finder 或别的工具找 /tmp 经常扑空。dist/ 已在 .gitignore 里。
 
 set -e
 
 cd "$(dirname "$0")/.."
 
 SRC=luci-app-mosdns
-OUT=${1:-/tmp/luci-app-mosdns-overlay.tar.gz}
+OUT=${1:-dist/luci-app-mosdns-overlay.tar.gz}
 
 [ -d "$SRC/htdocs" ] || { echo "错误：找不到 $SRC/htdocs，确认在仓库根目录" >&2; exit 1; }
+
+mkdir -p "$(dirname "$OUT")"
 
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
@@ -55,9 +60,10 @@ COPYFILE_DISABLE=1 tar -czf "$OUT" --no-xattr --no-acl -C "$TMP" . 2>/dev/null |
 	COPYFILE_DISABLE=1 tar -czf "$OUT" -C "$TMP" .
 
 SIZE=$(du -h "$OUT" | awk '{print $1}')
+ABS=$(cd "$(dirname "$OUT")" && pwd)/$(basename "$OUT")
 NAME=$(basename "$OUT")
 
-echo "已生成: $OUT ($SIZE)"
+echo "已生成: $ABS ($SIZE)"
 echo
 echo "── 包内顶层目录 ──"
 tar tzf "$OUT" | awk -F/ 'NF>=3 {print "/" $2}' | sort -u | sed 's/^/  /'

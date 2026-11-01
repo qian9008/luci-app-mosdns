@@ -1,0 +1,10 @@
+# 打包产物
+dist/
+
+# macOS 垃圾
+.DS_Store
+._*
+
+# 编辑器
+.vscode/
+*.swp
