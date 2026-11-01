@@ -26,6 +26,14 @@
 			"path": "mosdns/rules"
 		}
 	},
+	"admin/services/mosdns/route": {
+		"title": "Custom Upstream",
+		"order": 16,
+		"action": {
+			"type": "view",
+			"path": "mosdns/route"
+		}
+	},
 	"admin/services/mosdns/update": {
 		"title": "Geodata Update",
 		"order": 20,

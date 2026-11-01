@@ -1126,3 +1126,103 @@ msgstr "● 实时刷新"
 #: luci-app-mosdns/htdocs/luci-static/resources/view/mosdns/statistics.js:237
 msgid "❚❚ Paused (Page %d)"
 msgstr "❚❚ 暂停 (第 %d 页)"
+
+#: luci-app-mosdns/htdocs/luci-static/resources/view/mosdns/route.js:34
+msgid "AdGuard Public DNS (DNS over QUIC)"
+msgstr "AdGuard 公共 DNS（DNS over QUIC）"
+
+#: luci-app-mosdns/htdocs/luci-static/resources/view/mosdns/route.js:90
+msgid "Built-in Domain Sets"
+msgstr "内置域名集合"
+
+#: luci-app-mosdns/htdocs/luci-static/resources/view/mosdns/route.js:31
+msgid "CloudFlare Public DNS (DNS over HTTPS)"
+msgstr "CloudFlare 公共 DNS（DNS over HTTPS）"
+
+#: luci-app-mosdns/htdocs/luci-static/resources/view/mosdns/route.js:55
+msgid "Custom Upstream Routing"
+msgstr "自定义上游分流"
+
+#: luci-app-mosdns/htdocs/luci-static/resources/view/mosdns/route.js:76
+msgid "Display name only, never written into the mosdns config."
+msgstr "仅用于界面显示，不会写入 mosdns 配置文件。"
+
+#: luci-app-mosdns/htdocs/luci-static/resources/view/mosdns/route.js:79
+msgid "Domain Rules"
+msgstr "域名规则"
+
+#: luci-app-mosdns/htdocs/luci-static/resources/view/mosdns/route.js:72
+msgid "Enable"
+msgstr "启用"
+
+#: luci-app-mosdns/htdocs/luci-static/resources/view/mosdns/route.js:92
+msgid "Entries here and the domain rules above are merged with OR."
+msgstr "此处与上方的域名规则为「或」关系，任一命中即生效。"
+
+#: luci-app-mosdns/htdocs/luci-static/resources/view/mosdns/route.js:30
+msgid "Google Public DNS (DNS over HTTPS)"
+msgstr "Google 公共 DNS（DNS over HTTPS）"
+
+#: luci-app-mosdns/htdocs/luci-static/resources/view/mosdns/route.js:98
+msgid "Multiple entries are queried concurrently."
+msgstr "多个上游会并发查询。"
+
+#: luci-app-mosdns/htdocs/luci-static/resources/view/mosdns/route.js:67
+msgid "New Rule"
+msgstr "新规则"
+
+#: luci-app-mosdns/htdocs/luci-static/resources/view/mosdns/route.js:80
+msgid "One entry per rule. No prefix means suffix match: example.com matches example.com and every subdomain."
+msgstr "每行一条规则。不加前缀为后缀匹配：example.com 会命中 example.com 及其所有子域名。"
+
+#: luci-app-mosdns/htdocs/luci-static/resources/view/mosdns/route.js:58
+msgid "Only takes effect with the Default Config. Saving settings restarts MosDNS."
+msgstr "仅在「默认配置」下生效。保存设置会重启 MosDNS。"
+
+#: luci-app-mosdns/htdocs/luci-static/resources/view/mosdns/route.js:83
+msgid "Prefer suffix rules unless you really need fuzzy matching."
+msgstr "除非确实需要模糊匹配，否则建议使用后缀规则。"
+
+#: luci-app-mosdns/htdocs/luci-static/resources/view/mosdns/route.js:33
+msgid "Quad9 Public DNS (DNS over HTTPS)"
+msgstr "Quad9 公共 DNS（DNS over HTTPS）"
+
+#: luci-app-mosdns/htdocs/luci-static/resources/view/mosdns/route.js:91
+msgid "Reuse an existing domain_set instead of writing domains by hand."
+msgstr "直接复用已有的 domain_set，无需手工录入域名。"
+
+#: luci-app-mosdns/htdocs/luci-static/resources/view/mosdns/route.js:63
+msgid "Routing Rule"
+msgstr "分流规则"
+
+#: luci-app-mosdns/htdocs/luci-static/resources/view/mosdns/route.js:75
+msgid "Rule Name"
+msgstr "规则名称"
+
+#: luci-app-mosdns/htdocs/luci-static/resources/view/mosdns/route.js:56
+msgid "Rules are evaluated after the block list and before the built-in GeoIP / GeoSite splitting,"
+msgstr "规则在「黑名单拦截」之后、「内置 GeoIP / GeoSite 分流」之前生效，"
+
+#: luci-app-mosdns/htdocs/luci-static/resources/view/mosdns/route.js:99
+msgid "Rules sharing the same upstream list reuse one forward instance, so there is no duplicate connection pool."
+msgstr "上游列表相同的规则共用一个 forward 实例，不会产生重复连接池。"
+
+#: luci-app-mosdns/htdocs/luci-static/resources/view/mosdns/route.js:55
+msgid "Sends queries matching the given domain rules to a dedicated upstream DNS."
+msgstr "将命中指定域名规则的查询交由单独的上游 DNS 解析。"
+
+#: luci-app-mosdns/htdocs/luci-static/resources/view/mosdns/route.js:82
+msgid "Setting a dedicated upstream for a large keyword list has a cost: keyword matching scans the whole list on every query."
+msgstr "为大数量关键词单独指定上游有性能代价：关键词匹配会在每次查询时扫描整个列表。"
+
+#: luci-app-mosdns/htdocs/luci-static/resources/view/mosdns/route.js:57
+msgid "so a manual match always wins over the automatic classification."
+msgstr "因此手动指定的规则一定优先于自动分类结果。"
+
+#: luci-app-mosdns/htdocs/luci-static/resources/view/mosdns/route.js:97
+msgid "Upstream DNS"
+msgstr "上游 DNS 服务器"
+
+#: luci-app-mosdns/htdocs/luci-static/resources/view/mosdns/route.js:81
+msgid "Use keyword:xxx for substring match, full:xxx for exact match."
+msgstr "需要子串匹配请写 keyword:xxx，完全匹配请写 full:xxx。"

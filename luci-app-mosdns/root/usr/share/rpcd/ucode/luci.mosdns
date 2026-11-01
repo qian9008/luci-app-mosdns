@@ -337,6 +337,33 @@ const methods = {
 				return { error: String(e) };
 			}
 		}
+	},
+
+	// 供「自定义上游路由」页面的预设下拉使用：
+	// 从已生成的配置里反查所有 domain_set 类型的 tag，避免在 UI 里硬编码集合名。
+	get_domain_sets: {
+		call: function() {
+			let paths = ['/var/etc/mosdns.json', '/var/etc/mosdns.base.json'];
+			for (let i = 0; i < length(paths); i++) {
+				let raw = readfile(paths[i]);
+				if (!raw) continue;
+				try {
+					let cfg = json(raw);
+					if (type(cfg) != 'object' || type(cfg.plugins) != 'array') continue;
+					let sets = [];
+					for (let j = 0; j < length(cfg.plugins); j++) {
+						let p = cfg.plugins[j];
+						// 排除本功能自己生成的集合，避免下拉里出现 route_set_N
+						if (type(p) == 'object' && p.type == 'domain_set' && p.tag && index(p.tag, 'route_') != 0)
+							push(sets, p.tag);
+					}
+					return { sets: sets };
+				} catch (e) {
+					continue;
+				}
+			}
+			return { sets: [] };
+		}
 	}
 };
 

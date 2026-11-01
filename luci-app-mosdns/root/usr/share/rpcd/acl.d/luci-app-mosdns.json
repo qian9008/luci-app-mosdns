@@ -22,6 +22,7 @@
 					"clean_log",
 					"clear_query_logs",
 					"flush_cache",
+					"get_domain_sets",
 					"get_history",
 					"get_leases",
 					"get_logs",

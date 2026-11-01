@@ -12,6 +12,7 @@ DUMP_FILE=/etc/mosdns/cache.dump
 DUMP_FILE_DEFAULT=/usr/share/mosdns/cache.dump
 STATS_DUMP_FILE=/etc/mosdns/stats.dump
 MOSDNS_SCRIPT=/usr/share/mosdns/mosdns.uc
+ROUTE_SCRIPT=/usr/share/mosdns/route.uc
 REDIRECT_LOCK_FILE=/etc/mosdns/redirect.lock
 
 get_config() {
@@ -740,7 +741,11 @@ generate_config() {
 	# close plugins array
 	json_close_array
 	# print json
-	json_dump > /var/etc/mosdns.json
+	# 基础配置落到 base.json，再由 route.uc 合并「自定义上游路由」生成最终配置。
+	# 先复制一份兜底：route.uc 异常时 mosdns 仍能用基础配置启动。
+	json_dump > /var/etc/mosdns.base.json
+	cp -f /var/etc/mosdns.base.json /var/etc/mosdns.json
+	$ROUTE_SCRIPT || logger -t mosdns "route.uc failed, custom routes skipped"
 
 	# init dump_file
 	[ "$dump_file" -eq 1 ] && [ ! -f $DUMP_FILE ] && cp -a $DUMP_FILE_DEFAULT $DUMP_FILE
