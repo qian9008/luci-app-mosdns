@@ -2,10 +2,13 @@ name: Build Packages
 
 # 触发方式：
 #   1. push tag         → 只构建「精选常用架构」（DEFAULT_ARCHES），避免 32×2=64 个 job 烧额度
-#   2. 手动 Run workflow → 自己选架构 + 版本，可单架构、精选、或全量
+#   2. 手动 Run workflow → 下拉选架构 + 版本
 #
-# 架构清单是唯一数据源，在下方 prepare job 的 Python 里定义。
-# 手动输入不存在的架构名会直接报错并列出全部合法值，不用翻代码查。
+# ⚠ 架构清单有两份，改的时候必须同步：
+#    - 下面 workflow_dispatch.inputs.arch.options  ← 只负责下拉框显示什么
+#    - prepare job Python 里的 ALL_ARCHES          ← 真正的构建清单
+#   GitHub Actions 的 choice 只能硬编码，没法引用变量，这是平台限制。
+#   万一两边不同步，prepare 会直接报错 "options 与 ALL_ARCHES 不同步"，不会静默出错。
 
 on:
   push:
@@ -14,17 +17,52 @@ on:
   workflow_dispatch:
     inputs:
       arch:
-        description: '目标架构。留空=精选常用架构(9个)；填 all=全部 32 个；也可填单个，如 x86_64 / aarch64_cortex-a53'
-        required: false
-        default: ''
+        description: '目标架构（选 all 会编全部 32 个，慎用）'
+        required: true
+        type: choice
+        default: x86_64
+        options:
+          - x86_64
+          - all
+          - aarch64_cortex-a53
+          - aarch64_cortex-a72
+          - aarch64_cortex-a76
+          - aarch64_generic
+          - arm_arm1176jzf-s_vfp
+          - arm_arm926ej-s
+          - arm_cortex-a15_neon-vfpv4
+          - arm_cortex-a5_vfpv4
+          - arm_cortex-a7
+          - arm_cortex-a7_neon-vfpv4
+          - arm_cortex-a7_vfpv4
+          - arm_cortex-a8_vfpv3
+          - arm_cortex-a9
+          - arm_cortex-a9_neon
+          - arm_cortex-a9_vfpv3-d16
+          - arm_fa526
+          - arm_xscale
+          - i386_pentium-mmx
+          - i386_pentium4
+          - loongarch64_generic
+          - mips64_mips64r2
+          - mips64_octeonplus
+          - mips64el_mips64r2
+          - mips_24kc
+          - mips_4kec
+          - mips_mips32
+          - mipsel_24kc
+          - mipsel_24kc_24kf
+          - mipsel_74kc
+          - mipsel_mips32
+          - riscv64_riscv64
       tag:
         description: 'OpenWrt 版本'
         required: true
         type: choice
-        default: openwrt-24.10
+        default: openwrt-25.12
         options:
-          - openwrt-24.10
           - openwrt-25.12
+          - openwrt-24.10
           - all
       release_tag:
         description: '发布到指定 Release 标签。留空=只构建产物并上传为 Actions artifact，不创建 Release'
@@ -125,18 +163,19 @@ jobs:
           release_in = (os.environ.get("INPUT_RELEASE_TAG") or "").strip()
 
           if event == "workflow_dispatch":
-              # 架构：空 → 精选；all → 全部；其他 → 单个（需精确匹配）
-              if arch_in and arch_in != "all":
-                  if arch_in not in ALL_ARCHES:
-                      sys.exit(
-                          "未知架构: %s\n可选值:\n  all\n  %s"
-                          % (arch_in, "\n  ".join(ALL_ARCHES))
-                      )
-                  arches = [arch_in]
-              elif arch_in == "all":
+              # 架构由下拉框给出，理论上一定是合法值。
+              # 走到最后的 else，说明 options 和 ALL_ARCHES 有一边改了没同步，
+              # 宁可报错也不要静默构建一个不存在的架构。
+              if arch_in == "all":
                   arches = ALL_ARCHES
+              elif arch_in in ALL_ARCHES:
+                  arches = [arch_in]
               else:
-                  arches = DEFAULT_ARCHES
+                  sys.exit(
+                      "架构 '%s' 不在 ALL_ARCHES 里："
+                      "workflow_dispatch.inputs.arch.options 与 ALL_ARCHES 不同步"
+                      % arch_in
+                  )
 
               tags = [tag_in] if tag_in in TAGS else TAGS
               # 手动运行：release_tag 留空 → 只出 artifact，不碰 Release
