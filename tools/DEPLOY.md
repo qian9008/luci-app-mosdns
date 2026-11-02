@@ -166,6 +166,82 @@ mosdns.base.json + mosdns.json 都在
 
 ---
 
+## 升级 mosdns 版本（不用编译）
+
+上游已经有各架构的预编译包，直接下 release，不需要碰 SDK。
+
+```sh
+# 查最新版本
+curl -sL https://api.github.com/repos/sbwml/luci-app-mosdns/releases/latest | grep tag_name
+
+# 下载对应架构（示例 x86_64 + 25.12）
+curl -LO https://github.com/sbwml/luci-app-mosdns/releases/download/v5.3.4-r15/x86_64-openwrt-25.12.tar.gz
+tar xzf x86_64-openwrt-25.12.tar.gz
+```
+
+包内有 6 个 apk：
+
+```
+mosdns-5.3.4-r15.apk               ← 只含 usr/bin/mosdns 一个文件
+luci-app-mosdns-1.7.15-r1.apk      ← 含 init.d / menu.d / acl.d / 所有 js
+geo2txt / v2ray-geoip / v2ray-geosite / luci-i18n-mosdns-zh-cn
+```
+
+### 只升二进制（最小改动）
+
+```sh
+apk add --allow-untrusted /tmp/mosdns-5.3.4-r15.apk
+/etc/init.d/mosdns restart
+/usr/bin/mosdns version      # v5.3.4-r15
+```
+
+只替换 `/usr/bin/mosdns`。二开文件、配置、LuCI 全不动。适合只想吃新 patch 的场景。
+
+### 连 luci-app 一起升（版本对齐时）
+
+```sh
+apk add --allow-untrusted /tmp/luci-app-mosdns-1.7.15-r1.apk
+```
+
+**升级后必须重新部署二开层**，因为 apk 的保护机制覆盖不到这几类文件：
+
+| 文件 | apk 怎么处理 |
+|---|---|
+| `/etc/config/mosdns` | 存成 `.apk-new`，原文件保留（配置安全） |
+| `/etc/init.d/mosdns` | 存成 `.apk-new`，原文件保留（二开逻辑安全） |
+| `/etc/mosdns/rule/*.txt` | 存成 `.apk-new` |
+| `/usr/share/luci/menu.d/luci-app-mosdns.json` | **直接覆盖**，route 菜单消失 |
+| `/usr/share/rpcd/acl.d/luci-app-mosdns.json` | **直接覆盖**，`get_domain_sets` 权限消失 |
+| `/usr/share/rpcd/ucode/luci.mosdns` | **直接覆盖**，二开 rpcd 接口消失 |
+
+所以升级完紧接着：
+
+```sh
+./tools/pack-luci.sh
+scp dist/luci-app-mosdns-overlay.tar.gz root@192.168.50.9:/tmp/
+ssh root@192.168.50.9 'cd / && tar xzf /tmp/luci-app-mosdns-overlay.tar.gz
+/etc/init.d/mosdns restart
+rm -rf /tmp/luci-*
+/etc/init.d/rpcd restart'
+```
+
+最后清掉 mosdns 相关的 `.apk-new`（官方原始文件，留着只是干扰）：
+
+```sh
+rm -f /etc/init.d/mosdns.apk-new /etc/config/mosdns.apk-new /etc/mosdns/rule/*.apk-new
+```
+
+### 升级后验证
+
+```sh
+/usr/bin/mosdns version                                              # v5.3.4-r15
+grep -c "mosdns/route" /usr/share/luci/menu.d/luci-app-mosdns.json   # 2
+ubus list luci.mosdns                                                # 有输出
+ubus call luci.mosdns get_domain_sets                                # 返回 sets 列表
+grep -c route_seq /var/etc/mosdns.json                               # >0 说明规则生效
+logread -e mosdns | tail -5                                          # 找 route.uc: N rule(s) applied
+```
+
 ## 回滚
 
 ### 只回滚文件（保留配置）
