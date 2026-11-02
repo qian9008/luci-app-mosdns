@@ -211,11 +211,11 @@ CI 慢的根源在依赖：`PACKAGES: luci-app-mosdns` 会连带编译 `mosdns` 
 ### tools/pack-luci.sh
 
 ```sh
-./tools/pack-luci.sh                    # → /tmp/luci-app-mosdns-overlay.tar.gz
+./tools/pack-luci.sh                    # → ./dist/luci-app-mosdns-overlay.tar.gz
 ./tools/pack-luci.sh ./out.tar.gz       # 指定输出
 ```
 
-产出几十 KB，秒级。路由器上：
+产出 112 KB，秒级。路由器上：
 
 ```sh
 cd / && tar xzf /tmp/luci-app-mosdns-overlay.tar.gz
@@ -224,6 +224,46 @@ rm -rf /tmp/luci-*              # LuCI 页面缓存
 /etc/init.d/rpcd restart        # menu.d / acl.d 改动
 ```
 
+### ⚠ 打包必须强制 root:root 且不能有 `./` 条目（2026-11-01 事故）
+
+**症状**：路由器重启后 `/` 权限变成 `drwx------ 501:dialout`，所有非 root 进程（uhttpd、dnsmasq、dropbear）无法遍历根目录，系统表现为"坏了、只能进临时系统"。
+
+**成因链**：
+
+1. 脚本用 `mktemp -d` 建临时目录，权限 `0700`，属主 `qian:staff`（macOS 上是 `501:20`）
+2. 用 `tar -C "$TMP" .` 打包，会生成一条 `./` 条目，带着 `0700 501:20`
+3. 路由器上 `cd / && tar xzf` 以 root 执行，**忠实恢复这条条目**：`chmod 700 /` + `chown 501:20 /`
+4. `/` 是 overlayfs 合并视图，改动落到 upperdir 根 → `/overlay/upper` 变成 `0700 501:dialout`
+5. 下次启动 overlay 挂好，`/` 直接继承这个属性 → 系统崩溃
+
+注意 `501:20` 在 Linux 上 gid 20 = `dialout`，所以现象是 `501:dialout`。
+
+**修复**：改用 Python `tarfile` 打包，做三件事：
+
+- 只遍历 `www` / `etc` / `usr` 三个顶层目录，**绝不产生 `./` 条目**
+- 所有条目 `uid=gid=0`、`uname=gname=root`
+- 目录统一 `755`，文件按可执行位给 `755`/`644`
+
+并且打包后自检两条硬性规则：
+
+```sh
+# 1. 不能有 ./ 条目
+tar tzf "$OUT" | grep -qx '\./'
+# 2. 所有条目 uid=gid=0（用 Python 读，tar tzvf 的列在 bsdtar/GNU tar 下不一致）
+```
+
+**恢复方法**（系统已经挂错但数据还在时）：
+
+```sh
+mount /dev/sdb1 /mnt/sdb1
+chown root:root /mnt/sdb1/upper
+chmod 755 /mnt/sdb1/upper
+find /mnt/sdb1/upper -uid 501 -exec chown root:root {} +
+sync && reboot
+```
+
+**教训**：`cd / && tar xzf` 是危险动作。任何要解压到根目录的包，必须保证包里没有 `.` 条目、没有非 root 属主。这是 tar 的保真特性，不是 bug。
+
 ### 绝对不能被覆盖的两个路径
 
 | 路径 | 后果 |
@@ -231,7 +271,7 @@ rm -rf /tmp/luci-*              # LuCI 页面缓存
 | `/etc/config/mosdns` | 所有 UCI 设置重置为默认 |
 | `/etc/mosdns/rule/*.txt` | 黑白名单 / hosts / 重定向规则全部清空 |
 
-脚本已用 `--exclude` 排除，并在打包后自检 `tar tzf | grep`，有残留就报错退出。
+脚本在临时树里直接 `rm -rf` 掉这两个目录，并在打包后自检 `tar tzf | grep`，有残留就报错退出。
 
 ### po 翻译覆盖无效
 
